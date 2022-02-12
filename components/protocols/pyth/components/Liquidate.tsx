@@ -156,24 +156,34 @@ const Liquidate = () => {
         Rx.map((val: number) => {
           if (val > 0) {
             // buy.
+            const orderSizeSupposedTo =
+              val *
+              (cluster === 'devnet'
+                ? orderSizeUSDC.devnet
+                : orderSizeUSDC.mainnet);
+            const orderSize = Math.min(
+              orderSizeSupposedTo,
+              balance.usdc_balance,
+            );
             return {
               side: 'buy',
-              size:
-                val *
-                (cluster === 'devnet'
-                  ? orderSizeUSDC.devnet
-                  : orderSizeUSDC.mainnet),
+              size: orderSize,
               fromToken: 'usdc',
               toToken: 'sol',
             };
           } else if (val <= 0) {
+            const orderSizeSupposedTo =
+              Math.abs(val) *
+              (cluster === 'devnet'
+                ? orderSizeSOL.devnet
+                : orderSizeSOL.mainnet);
+            const orderSize = Math.min(
+              orderSizeSupposedTo,
+              balance.sol_balance,
+            );
             return {
               side: 'sell',
-              size:
-                Math.abs(val) *
-                (cluster === 'devnet'
-                  ? orderSizeSOL.devnet
-                  : orderSizeSOL.mainnet),
+              size: orderSize,
               fromToken: 'sol',
               toToken: 'usdc',
             };
