@@ -13,6 +13,7 @@ import {
   Tag,
   notification,
   Tooltip,
+  Descriptions,
 } from 'antd';
 import {useGlobalState} from 'context';
 import {
@@ -35,6 +36,7 @@ import {
 } from '@figment-pyth/lib/wallet';
 import _ from 'lodash';
 import * as Rx from 'rxjs';
+import {DevnetPriceRatio} from './DevnetPriceRatio';
 
 const connection = new Connection(clusterApiUrl(PYTH_NETWORKS.DEVNET));
 const pythPublicKey = getPythProgramKeyForCluster(PYTH_NETWORKS.DEVNET);
@@ -55,11 +57,24 @@ const Liquidate = () => {
     orderBook,
     resetWallet,
     worth,
+    devnetToMainnetPriceRatioRef,
   } = useExtendedWallet(useLive, cluster, price);
   // yield is the amount of EMA to trigger a buy/sell signal.
   const [yieldExpectation, setYield] = useState<number>(0.001);
-  const [orderSizeUSDC, setOrderSizeUSDC] = useState<number>(20); // USDC
-  const [orderSizeSOL, setOrderSizeSOL] = useState<number>(0.14); // SOL
+  const [orderSizeUSDC, setOrderSizeUSDC] = useState<orderSizeMultipleCluster>({
+    mainnet: 20,
+    devnet: 20,
+  }); // USDC
+  type orderSizeMultipleCluster = {
+    mainnet: number;
+    devnet: number;
+  };
+
+  const [orderSizeSOL, setOrderSizeSOL] = useState<orderSizeMultipleCluster>({
+    mainnet: 0.14,
+    devnet: 0.14,
+  }); // SOL
+
   const [symbol, setSymbol] = useState<string | undefined>(undefined);
 
   // Shorten the public key for display purposes
@@ -104,9 +119,17 @@ const Liquidate = () => {
         type: 'SetIsCompleted',
       });
       // Set ordersize Amount in Sol respect to USDC.
-      setOrderSizeSOL(orderSizeUSDC / price!);
+      const orderSizeRatio = orderSizeUSDC.mainnet / price;
+      setOrderSizeSOL((sizes) => ({
+        devnet: orderSizeRatio / devnetToMainnetPriceRatioRef.sol_usdc,
+        mainnet: orderSizeUSDC.mainnet / price!,
+      }));
+      setOrderSizeUSDC((sizes) => ({
+        ...sizes,
+        devnet: devnetToMainnetPriceRatioRef.usdc_sol / sizes.mainnet,
+      }));
     }
-  }, [price, orderSizeUSDC, setPrice]);
+  }, [price, orderSizeUSDC.mainnet, setPrice, orderBook.length]);
 
   /**
    *  The useEffect below is responsible for handling the buy and sell signals.
@@ -135,14 +158,22 @@ const Liquidate = () => {
             // buy.
             return {
               side: 'buy',
-              size: val * orderSizeUSDC,
+              size:
+                val *
+                (cluster === 'devnet'
+                  ? orderSizeUSDC.devnet
+                  : orderSizeUSDC.mainnet),
               fromToken: 'usdc',
               toToken: 'sol',
             };
           } else if (val <= 0) {
             return {
               side: 'sell',
-              size: Math.abs(val) * orderSizeSOL,
+              size:
+                Math.abs(val) *
+                (cluster === 'devnet'
+                  ? orderSizeSOL.devnet
+                  : orderSizeSOL.mainnet),
               fromToken: 'sol',
               toToken: 'usdc',
             };
@@ -392,18 +423,50 @@ const Liquidate = () => {
         <Card>
           <BuySellControllers addOrder={addOrder} />
           <Card title={'Yield Expectation'} size={'small'} bordered={false}>
-            <InputNumber
-              value={yieldExpectation}
-              onChange={(e) => setYield(e)}
-              prefix="%"
-            />
-            <InputNumber
-              value={orderSizeUSDC}
-              onChange={(e) => setOrderSizeUSDC(e)}
-              prefix="USDC"
-              placeholder="Amount of USDC to buy"
-              style={{width: 200}}
-            />
+            <Descriptions title="Bot Order Settings ⚙️" bordered>
+              <Descriptions.Item label="Yield Expectation" span={2}>
+                <InputNumber
+                  value={yieldExpectation}
+                  onChange={(e) => setYield(e)}
+                  prefix="%"
+                />
+              </Descriptions.Item>
+              <Descriptions.Item label="Order size USDC" span={2}>
+                <InputNumber
+                  value={orderSizeUSDC.mainnet}
+                  onChange={(e) =>
+                    setOrderSizeUSDC((sizes) => ({...sizes, mainnet: e}))
+                  }
+                  prefix="USDC"
+                  placeholder="Amount of USDC to buy"
+                  style={{width: 200}}
+                />
+              </Descriptions.Item>
+              <Descriptions.Item label={'Order size SOL'} span={2}>
+                {orderSizeSOL.mainnet}
+              </Descriptions.Item>
+              <Descriptions.Item label={'Order size USDC'} span={2}>
+                {orderSizeUSDC.mainnet}
+              </Descriptions.Item>
+              {cluster === 'devnet' && (
+                <>
+                  <Descriptions.Item
+                    span={2}
+                    label={'Order size in Devnet SOL'}
+                    contentStyle={{background: 'yellow'}}
+                  >
+                    {orderSizeSOL.devnet}
+                  </Descriptions.Item>
+                  <Descriptions.Item
+                    span={2}
+                    label={'Order size in Devnet USDC'}
+                    contentStyle={{background: 'yellow'}}
+                  >
+                    {orderSizeUSDC.devnet}
+                  </Descriptions.Item>
+                </>
+              )}
+            </Descriptions>
           </Card>
           <Space direction="vertical" size="large">
             <br />
