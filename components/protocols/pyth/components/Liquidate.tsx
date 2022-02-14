@@ -189,6 +189,7 @@ const Liquidate = () => {
             };
           }
         }),
+        Rx.debounceTime(5000), //throttle the orders to be sent every 5.
       )
       .subscribe(async (v: any) => {
         await addOrder({
